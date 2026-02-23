@@ -32,7 +32,7 @@ python app.py
 
 このリポジトリには `vercel.json` があり、`api/index.py`（Flask）を Serverless Function として公開します。
 
-> 注意: Vercel のファイルシステムは永続ではないため、`data/learned_categories.json` の学習内容はデプロイ環境で永続化されません。永続化する場合は DB/KV を使ってください。
+> 注意: Vercel のファイルシステムは永続ではないため、学習データは既定で `/tmp/learned_categories.json` に保存されます（インスタンス再起動で消えます）。永続化する場合は DB/KV を使ってください。
 
 ## 仕様
 

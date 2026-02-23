@@ -5,22 +5,42 @@ from urllib import error, request
 
 
 class ProductClassifier:
-    def __init__(self, learning_file: str = 'data/learned_categories.json'):
-        self.learning_path = Path(learning_file)
-        self.learning_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, learning_file: str | None = None):
+        # Vercel の /var/task は read-only なので、既定は /tmp に保存する
+        default_path = '/tmp/learned_categories.json' if os.getenv('VERCEL') else 'data/learned_categories.json'
+        self.learning_path = Path(learning_file or default_path)
+        self.persistence_available = self._prepare_storage()
         self.knowledge = self._load_knowledge()
         self.base_url = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1').rstrip('/')
         self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
 
-    def _load_knowledge(self) -> dict[str, str]:
-        if not self.learning_path.exists():
-            return {}
-        with self.learning_path.open('r', encoding='utf-8') as f:
-            return json.load(f)
+    def _prepare_storage(self) -> bool:
+        try:
+            self.learning_path.parent.mkdir(parents=True, exist_ok=True)
+            return True
+        except Exception:
+            return False
 
-    def _save_knowledge(self) -> None:
-        with self.learning_path.open('w', encoding='utf-8') as f:
-            json.dump(self.knowledge, f, ensure_ascii=False, indent=2)
+    def _load_knowledge(self) -> dict[str, str]:
+        if not self.persistence_available:
+            return {}
+        try:
+            if not self.learning_path.exists():
+                return {}
+            with self.learning_path.open('r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _save_knowledge(self) -> bool:
+        if not self.persistence_available:
+            return False
+        try:
+            with self.learning_path.open('w', encoding='utf-8') as f:
+                json.dump(self.knowledge, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception:
+            return False
 
     def _prompt(self, product: str) -> str:
         return (
@@ -69,7 +89,6 @@ class ProductClassifier:
 
         prompt = self._prompt(product)
 
-        # 1) responses API を試す
         try:
             body = self._post_json(
                 '/responses',
@@ -83,13 +102,11 @@ class ProductClassifier:
             category = self._extract_from_responses(body)
             return category or '不明'
         except error.HTTPError as e:
-            # 404/未対応環境は chat/completions にフォールバック
             if e.code not in (400, 404, 405):
                 return '不明'
         except Exception:
             return '不明'
 
-        # 2) chat/completions API へフォールバック
         try:
             body = self._post_json(
                 '/chat/completions',
@@ -127,6 +144,6 @@ class ProductClassifier:
             'needs_learning': category == '不明',
         }
 
-    def learn(self, product: str, category: str) -> None:
+    def learn(self, product: str, category: str) -> bool:
         self.knowledge[product.strip().lower()] = category.strip()
-        self._save_knowledge()
+        return self._save_knowledge()

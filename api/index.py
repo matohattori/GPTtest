@@ -115,8 +115,10 @@ def learn():
     if not product or not category:
         return jsonify({'error': '商品名と分類の両方を入力してください。'}), 400
 
-    classifier.learn(product, category)
-    return jsonify({'message': f'「{product} → {category}」を学習しました。'})
+    saved = classifier.learn(product, category)
+    if saved:
+        return jsonify({'message': f'「{product} → {category}」を学習しました。'})
+    return jsonify({'message': f'「{product} → {category}」を一時学習しました（永続保存は不可）。'})
 
 
 if __name__ == '__main__':
